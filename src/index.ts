@@ -48,12 +48,13 @@ export const sessionStatusResponseSchema = z.object({
   signals_verified: z.array(z.string()).optional(),
   org_name: z.string().optional(),
   applicant_name: z.string().optional(),
-  applicant_email: z.string().optional(),
+  applicant_email: z.string().nullish(),
   signals_summary: z.array(signalSummarySchema).optional(),
   connected_providers: z.array(connectedProviderSchema).optional(),
   step_up_required: z.boolean().optional(),
   expires_at: z.string().optional(),
-  submitted_at: z.string().optional(),
+  submitted_at: z.string().nullish(),
+  applicant_submitted_at: z.string().nullish(),
   completed_at: z.string().optional(),
   is_voucher: z.boolean().optional(),
   vouching_for: z
@@ -163,7 +164,9 @@ export const caseReviewResponseSchema = z.object({
     .nullable()
     .optional(),
   confidence_panel: z.unknown().optional(),
-  not_verified_reason_label: z.string().optional(),
-  not_verified_note: z.string().optional(),
+  zone: z.string().nullish(),
+  not_verified_reason: z.string().nullish(),
+  not_verified_reason_label: z.string().nullish(),
+  not_verified_note: z.string().nullish(),
 });
 export type CaseReviewResponse = z.infer<typeof caseReviewResponseSchema>;
