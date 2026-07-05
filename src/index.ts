@@ -23,7 +23,7 @@ export const signalSummarySchema = z.object({
   key: z.string(),
   label: z.string(),
   status: z.enum(['verified', 'pending', 'missing', 'submitted_for_review']),
-  detail: z.string().optional(),
+  detail: z.string().nullish(),
 });
 export type SignalSummary = z.infer<typeof signalSummarySchema>;
 
@@ -127,11 +127,17 @@ export const caseReviewContinuityItemSchema = z.object({
 export type CaseReviewContinuityItem = z.infer<typeof caseReviewContinuityItemSchema>;
 
 export const caseReviewPillarSchema = z.object({
-  name: z.string(),
-  source: z.enum(['verification', 'continuity', 'both']),
-  level: z.enum(['strong', 'moderate', 'limited', 'missing']),
+  label: z.string(),
+  status: z.enum(['verified', 'partial', 'missing']),
+  sources: z.number(),
 });
 export type CaseReviewPillar = z.infer<typeof caseReviewPillarSchema>;
+
+export const caseReviewOpenQuestionSchema = z.object({
+  key: z.string(),
+  status: z.enum(['confirmed', 'connected', 'not_connected']),
+});
+export type CaseReviewOpenQuestion = z.infer<typeof caseReviewOpenQuestionSchema>;
 
 export const caseReviewResponseSchema = z.object({
   applicant: z.object({ display_name: z.string() }),
@@ -148,7 +154,7 @@ export const caseReviewResponseSchema = z.object({
   verification_timeline: z.array(caseReviewTimelineEventSchema),
   continuity_timeline: z.array(caseReviewContinuityItemSchema),
   confidence_pillars: z.array(caseReviewPillarSchema),
-  open_questions: z.array(z.string()),
+  open_questions: z.array(caseReviewOpenQuestionSchema),
   actions_available: z.object({
     proceed: z.boolean(),
     hold: z.boolean(),
