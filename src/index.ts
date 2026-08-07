@@ -65,6 +65,16 @@ export const sessionStatusResponseSchema = z.object({
   voucher_idv_required: z.boolean().optional(),
   voucher_idv_skipped: z.boolean().optional(),
   voucher_idv_verified: z.boolean().optional(),
+  // Applicant-side Plaid IDV (BF-B1 / ADR-012). Same three shapes as the
+  // voucher fields above; what differs is that nothing is gated on them —
+  // `required` means the org ASKS, and the applicant may decline (R3).
+  applicant_idv_required: z.boolean().optional(),
+  applicant_idv_skipped: z.boolean().optional(),
+  applicant_idv_verified: z.boolean().optional(),
+  // Which OAuth providers this environment has credentials for. The frontend
+  // renders a tile only for providers in this list, so an unconfigured
+  // provider is absent rather than an enabled tile that dead-ends.
+  available_oauth_providers: z.array(z.string()).optional(),
 });
 export type SessionStatusResponse = z.infer<typeof sessionStatusResponseSchema>;
 
