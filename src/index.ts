@@ -35,6 +35,57 @@ export const connectedProviderSchema = z.object({
 });
 export type ConnectedProvider = z.infer<typeof connectedProviderSchema>;
 
+export const workflowStepSchema = z.object({
+  step_type: z.string(),
+  required: z.boolean(),
+  /** Other step types that also satisfy this step, when the step accepts alternatives. */
+  satisfied_by: z.array(z.string()).optional(),
+});
+export type WorkflowStep = z.infer<typeof workflowStepSchema>;
+
+/**
+ * GET /sessions/:token — what the applicant flow renders from.
+ *
+ * `steps` is the ordered list for this session's workflow, and is the field to
+ * render from when it is present. `verification_steps` is the older
+ * organization-level list and remains the fallback for sessions that carry no
+ * workflow of their own, where both `workflow_key` and `steps` are null.
+ *
+ * Order is significant. Membership is not derivable from `verification_steps`:
+ * a workflow may include steps the organization-level list does not.
+ *
+ * Note that some step types can complete outside the applicant's current
+ * position in the flow, so `steps.length` is not a reliable denominator for
+ * progress. Use `progress` for that.
+ */
+export const sessionDetailResponseSchema = z.object({
+  session_id: z.string(),
+  status: z.string(),
+  org_name: z.string(),
+  inquiry_details: z
+    .object({
+      inquiry_id: z.string(),
+      status: z.string().optional(),
+      metadata: z.record(z.unknown()).optional(),
+      declined_at: z.string().nullish(),
+      decline_reason: z.string().nullish(),
+    })
+    .optional(),
+  verification_steps: z.array(z.string()),
+  workflow_key: z.string().nullish(),
+  steps: z.array(workflowStepSchema).nullish(),
+  progress: z
+    .object({
+      current_step: z.number().optional(),
+      steps_completed: z.array(z.string()).optional(),
+      steps_total: z.number().optional(),
+      percent_complete: z.number().optional(),
+    })
+    .optional(),
+  consent_status: z.enum(['granted', 'pending']),
+});
+export type SessionDetailResponse = z.infer<typeof sessionDetailResponseSchema>;
+
 export const sessionStatusResponseSchema = z.object({
   session_id: z.string(),
   status: z.string(),
