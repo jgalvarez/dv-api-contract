@@ -237,3 +237,23 @@ export const caseReviewResponseSchema = z.object({
   not_verified_note: z.string().nullish(),
 });
 export type CaseReviewResponse = z.infer<typeof caseReviewResponseSchema>;
+
+export const operatorOrgSchema = z.object({
+  org_id: z.string(),
+  name: z.string(),
+  subdomain: z.string().nullable(),
+  // Non-'standard' workflow keys this org has definitions for. A statement of
+  // fact about configuration, not a product label: the consumer decides what a
+  // given key means. Empty array = no definitions, the default journey.
+  // Optional so a consumer pinned to an older server keeps parsing.
+  workflow_keys: z.array(z.string()).optional(),
+});
+export type OperatorOrg = z.infer<typeof operatorOrgSchema>;
+
+export const operatorMeResponseSchema = z.object({
+  email: z.string().nullable(),
+  // null = authenticated but not a member of any org. A routable state, not an
+  // error, so this is a 200.
+  org: operatorOrgSchema.nullable(),
+});
+export type OperatorMeResponse = z.infer<typeof operatorMeResponseSchema>;
