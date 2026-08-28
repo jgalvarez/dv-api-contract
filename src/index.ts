@@ -19,6 +19,18 @@ export const caseRecommendationSchema = z.enum([
 export const zoneSchema = z.enum(['clear', 'gray', 'flag']);
 export const vouchOutcomeSchema = z.enum(['confirm', 'decline', 'unable_to_confirm']);
 
+/**
+ * The kind of organization this is — the field a consumer keys vocabulary,
+ * navigation and theme off. Known values are `residential_leasing` and
+ * `hr_recruiting`.
+ *
+ * Not an enum on purpose. The set is open: the server stores this without a
+ * constraint so that a new kind of organization costs nothing there, and an
+ * enum here would turn that into a parse error on the consumer instead. A
+ * value the consumer does not recognize should fall back, not fail.
+ */
+export const orgIndustrySchema = z.string();
+
 export const signalSummarySchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -98,6 +110,10 @@ export const sessionStatusResponseSchema = z.object({
   zone: z.string().nullable().optional(),
   signals_verified: z.array(z.string()).optional(),
   org_name: z.string().optional(),
+  // The organization's kind, carried here because both public journeys read
+  // this endpoint: an invitation activates into a session token that resolves
+  // against this same status route, so one field serves both.
+  org_industry: orgIndustrySchema.optional(),
   applicant_name: z.string().optional(),
   applicant_email: z.string().nullish(),
   signals_summary: z.array(signalSummarySchema).optional(),
@@ -242,6 +258,10 @@ export const operatorOrgSchema = z.object({
   org_id: z.string(),
   name: z.string(),
   subdomain: z.string().nullable(),
+  // Optional so a consumer pinned to an older server keeps parsing. Absent
+  // means unknown, which is not the same as any particular value — read it as
+  // "fall back", never as a default.
+  industry: orgIndustrySchema.optional(),
   // Non-'standard' workflow keys this org has definitions for. A statement of
   // fact about configuration, not a product label: the consumer decides what a
   // given key means. Empty array = no definitions, the default journey.
