@@ -254,6 +254,23 @@ export const caseReviewResponseSchema = z.object({
 });
 export type CaseReviewResponse = z.infer<typeof caseReviewResponseSchema>;
 
+// A flow an operator may start a case on.
+//
+// `workflow_key` is an ADDRESS — frozen, part of the definition table's unique
+// constraint and persisted onto the session. `display_name` is PRESENTATION and
+// moves freely; keeping them apart is what lets a flow be renamed without
+// migrating live sessions.
+//
+// `display_name` is NULLABLE and is usually null: the column was added without
+// a backfill because what these flows should be called is an open product
+// question. **Null means fall back to the key** — never render the key as
+// though it were a name without saying so.
+export const workflowChoiceSchema = z.object({
+  workflow_key: z.string(),
+  display_name: z.string().nullable(),
+});
+export type WorkflowChoice = z.infer<typeof workflowChoiceSchema>;
+
 export const operatorOrgSchema = z.object({
   org_id: z.string(),
   name: z.string(),
@@ -267,6 +284,15 @@ export const operatorOrgSchema = z.object({
   // given key means. Empty array = no definitions, the default journey.
   // Optional so a consumer pinned to an older server keeps parsing.
   workflow_keys: z.array(z.string()).optional(),
+  // The same set, carrying the name to show beside each key.
+  //
+  // A SECOND field rather than a widening of `workflow_keys`, because that
+  // array's shape is already declared here and a consumer pinned to v0.1.6 must
+  // keep parsing. The two are redundant on purpose and are derived from one
+  // query server-side, so they cannot disagree.
+  //
+  // Optional so a consumer pinned to an older server keeps parsing.
+  workflows: z.array(workflowChoiceSchema).optional(),
 });
 export type OperatorOrg = z.infer<typeof operatorOrgSchema>;
 
