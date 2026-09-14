@@ -138,6 +138,15 @@ export const sessionStatusResponseSchema = z.object({
   applicant_idv_required: z.boolean().optional(),
   applicant_idv_skipped: z.boolean().optional(),
   applicant_idv_verified: z.boolean().optional(),
+  // ADR-012 R2's tier credit, published rather than left for the consumer to
+  // re-derive (platform #525). `applicant_idv_verified` above comes from a
+  // cross-DB attestation lookup that can under-report (lookup failure, or the
+  // attestation write failing after the capture already committed);
+  // `idv_credit_earned` is sourced server-side from the same computation the
+  // submit gate itself uses, so a consumer that reads this instead of
+  // deriving its own "did they earn the credit" answer from
+  // `applicant_idv_verified` cannot land on a stricter number than the gate.
+  idv_credit_earned: z.boolean().optional(),
   // Which OAuth providers this environment has credentials for. The frontend
   // renders a tile only for providers in this list, so an unconfigured
   // provider is absent rather than an enabled tile that dead-ends.
