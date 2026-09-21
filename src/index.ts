@@ -147,6 +147,22 @@ export const sessionStatusResponseSchema = z.object({
   // deriving its own "did they earn the credit" answer from
   // `applicant_idv_verified` cannot land on a stricter number than the gate.
   idv_credit_earned: z.boolean().optional(),
+  // The vouch requirement the submit gate applies to this session, and how far
+  // the applicant is toward it. `required` is null when no requirement can be
+  // stated yet. `required_by` names the rule that produced `required`: 'flow'
+  // when the session's workflow states its own number, 'account_tier' when the
+  // number follows connected accounts. Read these rather than re-deriving them.
+  vouch_summary: z
+    .object({
+      sent: z.number(),
+      completed: z.number(),
+      required: z.number().nullable(),
+      required_by: z.enum(['flow', 'account_tier']).optional(),
+    })
+    .optional(),
+  // Whether POST /sessions/:token/submit would accept this session right now,
+  // from the same computation the submit route runs.
+  can_submit: z.boolean().optional(),
   // Which OAuth providers this environment has credentials for. The frontend
   // renders a tile only for providers in this list, so an unconfigured
   // provider is absent rather than an enabled tile that dead-ends.
