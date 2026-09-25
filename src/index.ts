@@ -183,9 +183,12 @@ export const caseReviewSourceSchema = z.object({
   id: z.string(),
   name: z.string(),
   category: sourceCategorySchema,
-  strength: sourceStrengthSchema,
-  tenure: z.string(),
-  corroboration: z.string(),
+  // Optional: not every source carries a strength grade.
+  strength: sourceStrengthSchema.optional(),
+  // null when unknown; absent on a vouch source.
+  tenure: z.string().nullish(),
+  // Absent on a vouch source, which carries `voucher` and `detail` instead.
+  corroboration: z.string().optional(),
   status: z.string().optional(),
   detail: z.string().optional(),
   confirmed_applicant: z.boolean().optional(),
@@ -243,8 +246,11 @@ export type CaseReviewOpenQuestion = z.infer<typeof caseReviewOpenQuestionSchema
 
 export const caseReviewResponseSchema = z.object({
   applicant: z.object({ display_name: z.string() }),
-  recommendation: caseRecommendationSchema,
-  confidence_label: confidenceLabelSchema,
+  // The rating fields (`recommendation`, `confidence_label`, `zone`, and the
+  // rating part of `confidence_panel`) are omitted for an organization that is
+  // not sent a rating. The evidence fields are sent either way.
+  recommendation: caseRecommendationSchema.optional(),
+  confidence_label: confidenceLabelSchema.optional(),
   reviewer_note: z.string().nullable(),
   connected_sources: z.array(caseReviewSourceSchema),
   evidence_tree: z.object({
