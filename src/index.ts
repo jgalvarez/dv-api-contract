@@ -172,10 +172,10 @@ export type SessionStatusResponse = z.infer<typeof sessionStatusResponseSchema>;
 
 export const vouchOutcomeResponseSchema = z.object({
   outcome: vouchOutcomeSchema,
-  vouch_strength: z.number(),
+  // Absent on the confirm outcome; decline and unable_to_confirm still send a
+  // hardcoded 0.
+  vouch_strength: z.number().optional(),
   applicant_rescored: z.boolean(),
-  applicant_score: z.number().optional(),
-  applicant_zone: zoneSchema.optional(),
 });
 export type VouchOutcomeResponse = z.infer<typeof vouchOutcomeResponseSchema>;
 
