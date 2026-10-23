@@ -443,7 +443,8 @@ export const resultEventSchema = z.object({
 export type ResultEvent = z.infer<typeof resultEventSchema>;
 
 /**
- * GET /api/v1/inquiries/:inquiry_id/result, version 1.0.0.
+ * GET /api/v1/inquiries/:inquiry_id/result, contract version 1 (see
+ * RESULT_SCHEMA_VERSION for the exact version).
  *
  * Facts only: what was verified, what is pending, who vouched and what they
  * said, and what happened when. It carries no score, zone, recommendation,
@@ -458,7 +459,9 @@ export type ResultEvent = z.infer<typeof resultEventSchema>;
  *   contract carries what the voucher said, not a way to reach them.
  */
 export const inquiryResultResponseSchema = z.object({
-  schema_version: z.string(),
+  // Any 1.x.y. A MINOR or PATCH version still parses; a new MAJOR version
+  // fails here on purpose, because its fields may mean something else.
+  schema_version: z.string().regex(/^1\.\d+\.\d+$/),
   inquiry_id: z.string(),
   applicant: z.object({
     name: z.string(),
@@ -496,8 +499,10 @@ export type InquiryResultResponse = z.infer<typeof inquiryResultResponseSchema>;
  * already receive them: FORBIDDEN and ORG_MISMATCH (the record or path
  * belongs to another organization), NOT_FOUND and INQUIRY_NOT_FOUND.
  *
- * Retry rule: retry a 429 after `retry_after_seconds`, and a 5xx with the same
- * request; never retry any other 4xx unchanged.
+ * Retry rule: retry a 429 after `retry_after_seconds`, and INTERNAL_ERROR
+ * with the same request a few times with backoff; never retry any other code
+ * unchanged. A body that is not valid JSON currently also returns 500
+ * INTERNAL_ERROR, so check the body before retrying.
  */
 export const PARTNER_ERROR_CODES = [
   // 400: a field is missing or invalid. `field` names it (dotted path) when known.
@@ -527,9 +532,10 @@ export const PARTNER_ERROR_CODES = [
   'UNMAPPED_JOB',
   // 429: too many requests. `retry_after_seconds` says when to try again.
   'RATE_LIMIT_EXCEEDED',
-  // 500: the organization's account is missing a setting needed for this job. Contact support.
+  // 500: the organization's account is missing a setting needed for this job.
+  // Retrying does not help; contact support.
   'NO_DEFAULT_CAMPAIGN',
-  // 500: an unexpected error. Safe to retry.
+  // 500: an unexpected error. Retry with backoff (see the retry rule above).
   'INTERNAL_ERROR',
 ] as const;
 export const partnerErrorCodeSchema = z.enum(PARTNER_ERROR_CODES);
