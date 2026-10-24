@@ -3,7 +3,7 @@
   "info": {
     "title": "Partner API",
     "version": "0.1.13",
-    "description": "The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.\n\n**Authentication.** Every route takes the organization's API key in the `X-API-Key` header. The key belongs to one organization and decides which organization a request acts for. Do not send an `Authorization` header: when present it is read instead of the key, and these routes then refuse the request.\n\n**Two names for one id.** A case id is called `case_id` when a case is created and `inquiry_id` everywhere else. They are the same value.\n\n**Facts, not ratings.** The result reports what was verified, what is pending, who vouched and what they said, and what happened when. It carries no score, zone, recommendation or confidence.\n\n**Errors.** Every error body has a `code` from a closed list, a `message` for people, and on a field error a `field`. Branch on the HTTP status first and the code second, and treat a code you do not know by its status. Some error bodies also carry older fields (`error`, `statusCode`); they are not part of the contract.\n\n**Retries.** Retry a 429 after `retry_after_seconds`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.\n\n**Limits.** 1000 requests a minute per organization key.\n\n**Versioning.** The result carries `schema_version`; see its description. Fields not listed in this document may appear in responses: ignore them."
+    "description": "The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.\n\n**Authentication.** Every route takes the organization's API key in the `X-API-Key` header. The key belongs to one organization and decides which organization a request acts for. Do not send an `Authorization` header: when present it is read instead of the key, and these routes then refuse the request.\n\n**Two names for one id.** A case id is called `case_id` when a case is created and `inquiry_id` everywhere else. They are the same value.\n\n**Facts, not ratings.** The result reports what was verified, what is pending, who vouched and what they said, and what happened when. It carries no score, zone, recommendation or confidence.\n\n**Errors.** Every error body has a `code` from a closed list, a `message` for people, and on a field error a `field`. Branch on the HTTP status first and the code second, and treat a code you do not know by its status. Some error bodies also carry older fields (`error`, `statusCode`); they are not part of the contract.\n\n**Retries.** Retry a 429 after `retry_after_seconds`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.\n\n**Limits.** 1000 requests a minute per organization key. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the window resets), so you can slow down before a 429.\n\n**Versioning.** The result carries `schema_version`; see its description. Fields not listed in this document may appear in responses: ignore them."
   },
   "servers": [
     {
@@ -515,7 +515,7 @@
         "tags": [
           "Cases"
         ],
-        "description": "A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body.",
+        "description": "A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. Today a case the organization deleted still gets a link here (201), although its result answers 404: check the result first if that matters to you.",
         "parameters": [
           {
             "$ref": "#/components/parameters/InquiryId"
@@ -973,7 +973,10 @@
             "type": "object",
             "properties": {
               "name": {
-                "type": "string",
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "description": "Optional. Used to greet the applicant."
               },
               "email": {

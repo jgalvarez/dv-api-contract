@@ -556,7 +556,7 @@ export const intakeApplicationRequestSchema = z
       .optional()
       .describe('Optional. Used only to label a job the organization has not mapped yet.'),
     candidate: z.object({
-      name: z.string().optional().describe('Optional. Used to greet the applicant.'),
+      name: z.string().nullish().describe('Optional. Used to greet the applicant.'),
       email: z
         .string()
         .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)

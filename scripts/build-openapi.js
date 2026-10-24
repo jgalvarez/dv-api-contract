@@ -160,7 +160,7 @@ const INFO_DESCRIPTION = `The routes an integration partner uses to start a case
 
 **Retries.** Retry a 429 after \`retry_after_seconds\`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.
 
-**Limits.** 1000 requests a minute per organization key.
+**Limits.** 1000 requests a minute per organization key. Every response carries \`X-RateLimit-Limit\`, \`X-RateLimit-Remaining\` and \`X-RateLimit-Reset\` (seconds until the window resets), so you can slow down before a 429.
 
 **Versioning.** The result carries \`schema_version\`; see its description. Fields not listed in this document may appear in responses: ignore them.`;
 
@@ -265,7 +265,7 @@ How the applicant is reached is the organization's setting: an email from us, th
           summary: 'Issue a fresh applicant link',
           tags: ['Cases'],
           description:
-            'A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body.',
+            'A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. Today a case the organization deleted still gets a link here (201), although its result answers 404: check the result first if that matters to you.',
           parameters: [p('InquiryId'), p('OrgSelection')],
           responses: {
             201: {
