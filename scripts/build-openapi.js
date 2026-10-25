@@ -110,7 +110,7 @@ const rateLimited = errorResponse(
 const internalError = (codes, description) =>
   errorResponse(
     description ??
-      'An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff. A path id that is not a UUID also returns this today: check the id before retrying.',
+      'An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff.',
     codes ?? ['INTERNAL_ERROR'],
   );
 
@@ -150,7 +150,7 @@ const p = (name) => ({ $ref: `#/components/parameters/${name}` });
 
 const INFO_DESCRIPTION = `The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.
 
-**Authentication.** Every route takes the organization's API key in the \`X-API-Key\` header. The key belongs to one organization and decides which organization a request acts for. Do not send an \`Authorization\` header: when present it is read instead of the key, and these routes then refuse the request.
+**Authentication.** Every route takes the organization's API key in the \`X-API-Key\` header. The key belongs to one organization and decides which organization a request acts for. A request that carries the key is answered only as this document describes: an \`Authorization\` header on it is ignored. A request with an \`Authorization\` header and no key is a person's login, not a partner request, and is not described here beyond intake refusing it (API_KEY_REQUIRED).
 
 **Two names for one id.** A case id is called \`case_id\` when a case is created and \`inquiry_id\` everywhere else. They are the same value.
 
@@ -208,7 +208,7 @@ How the applicant is reached is the organization's setting: an email from us, th
               content: { 'application/json': { schema: ref('IntakeApplicationResponse') } },
             },
             400: errorResponse(
-              `A field is missing or invalid (INVALID_REQUEST, with \`field\`: \`body\`, \`application_id\`, \`job_id\`, \`candidate\` or \`candidate.email\`), or ${orgSelectionInvalid}`,
+              `A field is missing or invalid (INVALID_REQUEST, with \`field\`: \`body\`, \`application_id\`, \`job_id\`, \`candidate\` or \`candidate.email\`), the body is not valid JSON (INVALID_REQUEST, without \`field\`), or ${orgSelectionInvalid}`,
               ['INVALID_REQUEST', 'ORG_SELECTION_INVALID'],
             ),
             401: authFailed,
@@ -229,7 +229,7 @@ How the applicant is reached is the organization's setting: an email from us, th
             429: rateLimited,
             500: internalError(
               ['NO_DEFAULT_CAMPAIGN', 'INTERNAL_ERROR'],
-              "The organization's account is missing a setting this job needs (NO_DEFAULT_CAMPAIGN): retrying does not help, contact support. Or an unexpected error (INTERNAL_ERROR): retry the same request a few times with backoff. A body that is not valid JSON also returns INTERNAL_ERROR today: check the body before retrying.",
+              "The organization's account is missing a setting this job needs (NO_DEFAULT_CAMPAIGN): retrying does not help, contact support. Or an unexpected error (INTERNAL_ERROR): retry the same request a few times with backoff.",
             ),
           },
         },
@@ -253,7 +253,10 @@ How the applicant is reached is the organization's setting: an email from us, th
               `The case belongs to another organization (FORBIDDEN), or ${orgSelectionForbidden}`,
               ['FORBIDDEN', 'ORG_SELECTION_FORBIDDEN'],
             ),
-            404: errorResponse('No such case, or the organization deleted it.', ['NOT_FOUND']),
+            404: errorResponse(
+              'No such case, an id that is not a UUID, or a case the organization deleted.',
+              ['NOT_FOUND'],
+            ),
             429: rateLimited,
             500: internalError(),
           },
@@ -265,20 +268,32 @@ How the applicant is reached is the organization's setting: an email from us, th
           summary: 'Issue a fresh applicant link',
           tags: ['Cases'],
           description:
-            'A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. Today a case the organization deleted still gets a link here (201), although its result answers 404: check the result first if that matters to you.',
+            'A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. A case the organization deleted gets no link: this route answers 404 for it, as its result does.',
           parameters: [p('InquiryId'), p('OrgSelection')],
           responses: {
             201: {
               description: 'The new link.',
+              headers: {
+                'Cache-Control': {
+                  description: "`no-store`: the body carries the applicant's link.",
+                  schema: { type: 'string' },
+                },
+              },
               content: { 'application/json': { schema: ref('InquirySessionResponse') } },
             },
-            400: errorResponse(sentence(orgSelectionInvalid), ['ORG_SELECTION_INVALID']),
+            400: errorResponse(
+              `A body was sent and is not valid JSON (INVALID_REQUEST), or ${orgSelectionInvalid}`,
+              ['INVALID_REQUEST', 'ORG_SELECTION_INVALID'],
+            ),
             401: authFailed,
             403: errorResponse(
               `The case belongs to another organization (ORG_MISMATCH), or ${orgSelectionForbidden}`,
               ['ORG_MISMATCH', 'ORG_SELECTION_FORBIDDEN'],
             ),
-            404: errorResponse('No such case.', ['INQUIRY_NOT_FOUND']),
+            404: errorResponse(
+              'No such case, an id that is not a UUID, or a case the organization deleted.',
+              ['INQUIRY_NOT_FOUND'],
+            ),
             409: errorResponse(
               "The organization's reviewer has recorded a decision on this case, so no new link is issued.",
               ['INQUIRY_DECIDED'],

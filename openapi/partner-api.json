@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Partner API",
-    "version": "0.1.13",
-    "description": "The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.\n\n**Authentication.** Every route takes the organization's API key in the `X-API-Key` header. The key belongs to one organization and decides which organization a request acts for. Do not send an `Authorization` header: when present it is read instead of the key, and these routes then refuse the request.\n\n**Two names for one id.** A case id is called `case_id` when a case is created and `inquiry_id` everywhere else. They are the same value.\n\n**Facts, not ratings.** The result reports what was verified, what is pending, who vouched and what they said, and what happened when. It carries no score, zone, recommendation or confidence.\n\n**Errors.** Every error body has a `code` from a closed list, a `message` for people, and on a field error a `field`. Branch on the HTTP status first and the code second, and treat a code you do not know by its status. Some error bodies also carry older fields (`error`, `statusCode`); they are not part of the contract.\n\n**Retries.** Retry a 429 after `retry_after_seconds`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.\n\n**Limits.** 1000 requests a minute per organization key. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the window resets), so you can slow down before a 429.\n\n**Versioning.** The result carries `schema_version`; see its description. Fields not listed in this document may appear in responses: ignore them."
+    "version": "0.1.14",
+    "description": "The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.\n\n**Authentication.** Every route takes the organization's API key in the `X-API-Key` header. The key belongs to one organization and decides which organization a request acts for. A request that carries the key is answered only as this document describes: an `Authorization` header on it is ignored. A request with an `Authorization` header and no key is a person's login, not a partner request, and is not described here beyond intake refusing it (API_KEY_REQUIRED).\n\n**Two names for one id.** A case id is called `case_id` when a case is created and `inquiry_id` everywhere else. They are the same value.\n\n**Facts, not ratings.** The result reports what was verified, what is pending, who vouched and what they said, and what happened when. It carries no score, zone, recommendation or confidence.\n\n**Errors.** Every error body has a `code` from a closed list, a `message` for people, and on a field error a `field`. Branch on the HTTP status first and the code second, and treat a code you do not know by its status. Some error bodies also carry older fields (`error`, `statusCode`); they are not part of the contract.\n\n**Retries.** Retry a 429 after `retry_after_seconds`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.\n\n**Limits.** 1000 requests a minute per organization key. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the window resets), so you can slow down before a 429.\n\n**Versioning.** The result carries `schema_version`; see its description. Fields not listed in this document may appear in responses: ignore them."
   },
   "servers": [
     {
@@ -74,7 +74,7 @@
             }
           },
           "400": {
-            "description": "A field is missing or invalid (INVALID_REQUEST, with `field`: `body`, `application_id`, `job_id`, `candidate` or `candidate.email`), or the `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
+            "description": "A field is missing or invalid (INVALID_REQUEST, with `field`: `body`, `application_id`, `job_id`, `candidate` or `candidate.email`), the body is not valid JSON (INVALID_REQUEST, without `field`), or the `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
             "content": {
               "application/json": {
                 "schema": {
@@ -287,7 +287,7 @@
             }
           },
           "500": {
-            "description": "The organization's account is missing a setting this job needs (NO_DEFAULT_CAMPAIGN): retrying does not help, contact support. Or an unexpected error (INTERNAL_ERROR): retry the same request a few times with backoff. A body that is not valid JSON also returns INTERNAL_ERROR today: check the body before retrying.",
+            "description": "The organization's account is missing a setting this job needs (NO_DEFAULT_CAMPAIGN): retrying does not help, contact support. Or an unexpected error (INTERNAL_ERROR): retry the same request a few times with backoff.",
             "content": {
               "application/json": {
                 "schema": {
@@ -411,7 +411,7 @@
             }
           },
           "404": {
-            "description": "No such case, or the organization deleted it.",
+            "description": "No such case, an id that is not a UUID, or a case the organization deleted.",
             "content": {
               "application/json": {
                 "schema": {
@@ -483,7 +483,7 @@
             }
           },
           "500": {
-            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff. A path id that is not a UUID also returns this today: check the id before retrying.",
+            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff.",
             "content": {
               "application/json": {
                 "schema": {
@@ -515,7 +515,7 @@
         "tags": [
           "Cases"
         ],
-        "description": "A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. Today a case the organization deleted still gets a link here (201), although its result answers 404: check the result first if that matters to you.",
+        "description": "A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. A case the organization deleted gets no link: this route answers 404 for it, as its result does.",
         "parameters": [
           {
             "$ref": "#/components/parameters/InquiryId"
@@ -527,6 +527,14 @@
         "responses": {
           "201": {
             "description": "The new link.",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`: the body carries the applicant's link.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -536,7 +544,7 @@
             }
           },
           "400": {
-            "description": "The `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
+            "description": "A body was sent and is not valid JSON (INVALID_REQUEST), or the `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
             "content": {
               "application/json": {
                 "schema": {
@@ -548,6 +556,7 @@
                       "properties": {
                         "code": {
                           "enum": [
+                            "INVALID_REQUEST",
                             "ORG_SELECTION_INVALID"
                           ]
                         }
@@ -606,7 +615,7 @@
             }
           },
           "404": {
-            "description": "No such case.",
+            "description": "No such case, an id that is not a UUID, or a case the organization deleted.",
             "content": {
               "application/json": {
                 "schema": {
@@ -701,7 +710,7 @@
             }
           },
           "500": {
-            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff. A path id that is not a UUID also returns this today: check the id before retrying.",
+            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff.",
             "content": {
               "application/json": {
                 "schema": {

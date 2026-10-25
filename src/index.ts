@@ -673,11 +673,15 @@ export type InquiryListResponse = z.infer<typeof inquiryListResponseSchema>;
  *
  * Retry rule: retry a 429 after `retry_after_seconds`, and INTERNAL_ERROR
  * with the same request a few times with backoff; never retry any other code
- * unchanged. A body that is not valid JSON currently also returns 500
- * INTERNAL_ERROR, so check the body before retrying.
+ * unchanged.
+ *
+ * Closed means closed for a request that carries the organization's API key:
+ * an `Authorization` header on such a request is ignored, so a partner never
+ * gets an answer meant for a person who signed in.
  */
 export const PARTNER_ERROR_CODES = [
-  // 400: a field is missing or invalid. `field` names it (dotted path) when known.
+  // 400: a field is missing or invalid, or the body is not valid JSON. `field`
+  // names the field (dotted path) when known. Also the 413 and 415 code.
   'INVALID_REQUEST',
   // 400: the organization-selection header is not an organization id.
   'ORG_SELECTION_INVALID',
