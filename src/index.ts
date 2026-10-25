@@ -336,11 +336,15 @@ export const operatorMeResponseSchema = z.object({
 export type OperatorMeResponse = z.infer<typeof operatorMeResponseSchema>;
 
 // ---------------------------------------------------------------------------
-// Partner contract: the inquiry result and the error format.
+// Partner contract: the partner routes' bodies and the error format.
 //
 // Everything below is what an integration partner may rely on. It is
 // versioned on its own, separately from this package's version:
 // `schema_version` on the result says which contract a response follows.
+//
+// The `.describe()` texts are not decoration: they become the descriptions in
+// openapi/partner-api.json, which is generated from these schemas. Write them
+// for the partner who reads that document.
 // ---------------------------------------------------------------------------
 
 /**
@@ -356,17 +360,20 @@ export const RESULT_SCHEMA_VERSION = '1.0.0' as const;
 
 /**
  * One piece of evidence the organization asks for, and whether it has been
- * verified yet. `type` is a stable key such as `contact.email` or
- * `digital.email_history`; `detail` is a short human line describing what was
- * verified (for a pending item, "Not yet verified").
+ * verified yet.
  */
-export const resultSignalSchema = z.object({
-  type: z.string(),
-  status: z.enum(['verified', 'pending']),
-  detail: z.string(),
-  // When the evidence was collected. null while pending.
-  verified_at: z.string().nullable(),
-});
+export const resultSignalSchema = z
+  .object({
+    type: z
+      .string()
+      .describe('A stable key for the kind of evidence, such as `contact.email` or `digital.email_history`.'),
+    status: z.enum(['verified', 'pending']),
+    detail: z
+      .string()
+      .describe('A short human line describing what was verified. For a pending item, "Not yet verified".'),
+    verified_at: z.string().nullable().describe('When the evidence was collected. null while pending.'),
+  })
+  .describe('One piece of evidence the organization asks for, and whether it has been verified yet.');
 export type ResultSignal = z.infer<typeof resultSignalSchema>;
 
 /**
@@ -378,20 +385,32 @@ export type ResultSignal = z.infer<typeof resultSignalSchema>;
  * `confirm`, `decline` and `unable_to_confirm`; the set is open, so treat an
  * unknown value as "responded, outcome not recognized".
  */
-export const resultVoucherSchema = z.object({
-  invitation_id: z.string(),
-  voucher_name: z.string(),
-  relationship: z.string(),
-  status: z.string(),
-  outcome: z.string().nullable(),
-  // The voucher's own words, if they left any.
-  outcome_notes: z.string().nullable(),
-  // The voucher's answers to the organization's questions, keyed by question.
-  qa_responses: z.record(z.unknown()).nullable(),
-  outcome_recorded_at: z.string().nullable(),
-  sent_at: z.string(),
-  expires_at: z.string(),
-});
+export const resultVoucherSchema = z
+  .object({
+    invitation_id: z.string(),
+    voucher_name: z.string(),
+    relationship: z.string(),
+    status: z
+      .string()
+      .describe(
+        'The invitation\'s state. `accepted` means the voucher opened the link, not that they answered: see `outcome`.',
+      ),
+    outcome: z
+      .string()
+      .nullable()
+      .describe(
+        'Whether the voucher confirmed the applicant: `confirm`, `decline` or `unable_to_confirm`. null until they respond. The set is open: treat an unknown value as "responded, outcome not recognized".',
+      ),
+    outcome_notes: z.string().nullable().describe("The voucher's own words, if they left any."),
+    qa_responses: z
+      .record(z.unknown())
+      .nullable()
+      .describe("The voucher's answers to the organization's questions, keyed by question."),
+    outcome_recorded_at: z.string().nullable(),
+    sent_at: z.string(),
+    expires_at: z.string(),
+  })
+  .describe('A reference (voucher) the applicant invited.');
 export type ResultVoucher = z.infer<typeof resultVoucherSchema>;
 
 /**
@@ -430,16 +449,22 @@ export const RESULT_EVENT_KINDS = [
  * and `additional_verification_requested` record the organization's own
  * reviewer decision, not a judgement made by the service.
  */
-export const resultEventSchema = z.object({
-  kind: z.string(),
-  at: z.string(),
-  // A short human subtitle for the row, when there is one.
-  detail: z.string().nullable(),
-  actor: z.enum(['applicant', 'operator', 'voucher', 'system']).nullable(),
-  // The id of the thing the event is about (the case, an invitation, an
-  // evidence type or a reviewer action).
-  source_id: z.string().nullable(),
-});
+export const resultEventSchema = z
+  .object({
+    kind: z
+      .string()
+      .describe(
+        `What happened. Kinds sent today: ${RESULT_EVENT_KINDS.map((k) => `\`${k}\``).join(', ')}. The set is open: show an unknown kind generically rather than fail. \`identity_confidence_established\`, \`identity_confidence_not_established\` and \`additional_verification_requested\` record the organization's own reviewer decision, not a judgement made by the service.`,
+      ),
+    at: z.string(),
+    detail: z.string().nullable().describe('A short human subtitle for the row, when there is one.'),
+    actor: z.enum(['applicant', 'operator', 'voucher', 'system']).nullable(),
+    source_id: z
+      .string()
+      .nullable()
+      .describe('The id of the thing the event is about: the case, an invitation, an evidence type or a reviewer action.'),
+  })
+  .describe('One row of the activity stream. The stream is oldest first.');
 export type ResultEvent = z.infer<typeof resultEventSchema>;
 
 /**
@@ -458,36 +483,183 @@ export type ResultEvent = z.infer<typeof resultEventSchema>;
  * - `vouchers[].voucher_email` is a third party's contact detail. The
  *   contract carries what the voucher said, not a way to reach them.
  */
-export const inquiryResultResponseSchema = z.object({
-  // Any 1.x.y. A MINOR or PATCH version still parses; a new MAJOR version
-  // fails here on purpose, because its fields may mean something else.
-  schema_version: z.string().regex(/^1\.\d+\.\d+$/),
-  inquiry_id: z.string(),
-  applicant: z.object({
-    name: z.string(),
-    // The domain of the verified email address, once one is verified.
-    email_domain: z.string().nullable(),
-  }),
-  signals_summary: z.array(resultSignalSchema),
-  // How far the applicant is through their steps. All zero before the
-  // applicant has a link.
-  verification_progress: z.object({
-    current_step: z.number().optional(),
-    steps_completed: z.array(z.string()),
-    steps_total: z.number(),
-    percent_complete: z.number(),
-  }),
-  // When the applicant submitted. null until then.
-  submitted_at: z.string().nullable(),
-  // When the organization's reviewer recorded a decision. null until then.
-  decided_at: z.string().nullable(),
-  // The reviewer's decision: `approved`, `denied`, `escalated` or
-  // `requested_more_info`. null until one is recorded.
-  operator_action: z.string().nullable(),
-  vouchers: z.array(resultVoucherSchema),
-  events: z.array(resultEventSchema),
-});
+export const inquiryResultResponseSchema = z
+  .object({
+    // Any 1.x.y. A MINOR or PATCH version still parses; a new MAJOR version
+    // fails here on purpose, because its fields may mean something else.
+    schema_version: z
+      .string()
+      .regex(/^1\.\d+\.\d+$/)
+      .describe(
+        'The result contract version this response follows. MINOR adds a field (ignore fields you do not know); MAJOR removes, renames or changes one.',
+      ),
+    inquiry_id: z.string().describe('The case id.'),
+    applicant: z.object({
+      name: z.string(),
+      email_domain: z.string().nullable().describe('The domain of the verified email address, once one is verified.'),
+    }),
+    signals_summary: z.array(resultSignalSchema),
+    verification_progress: z
+      .object({
+        current_step: z.number().optional(),
+        steps_completed: z.array(z.string()),
+        steps_total: z.number(),
+        percent_complete: z.number(),
+      })
+      .describe('How far the applicant is through their steps. All zero before the applicant has a link.'),
+    submitted_at: z.string().nullable().describe('When the applicant submitted. null until then.'),
+    decided_at: z
+      .string()
+      .nullable()
+      .describe("When the organization's reviewer recorded a decision. null until then."),
+    operator_action: z
+      .string()
+      .nullable()
+      .describe(
+        "The organization's reviewer decision: `approved`, `denied`, `escalated` or `requested_more_info`. null until one is recorded.",
+      ),
+    vouchers: z.array(resultVoucherSchema),
+    events: z.array(resultEventSchema),
+  })
+  .describe(
+    'The facts of one case: what was verified, what is pending, who vouched and what they said, and what happened when. No score, zone, recommendation, per-item confidence or score breakdown, under this contract version or any 1.x. A response may carry older fields this schema does not declare (`applicant.dob`, `applicant.property`, `vouchers[].voucher_email`); they are not part of the contract and may disappear in a MAJOR version.',
+  );
 export type InquiryResultResponse = z.infer<typeof inquiryResultResponseSchema>;
+
+/**
+ * POST /digavouch/v1/intake/applications: the request body. One application
+ * in the caller's own system becomes one case here.
+ *
+ * The route trims `application_id`, `job_id` and `candidate.email` before it
+ * checks them, so a value that is only spaces is refused. Fields not declared
+ * here are ignored and not stored. The organization comes from the API key,
+ * never from the body.
+ */
+export const intakeApplicationRequestSchema = z
+  .object({
+    application_id: z
+      .string()
+      .min(1)
+      .max(200)
+      .describe(
+        "The application's id in your system: required, not blank, at most 200 characters after trimming. It is the key that makes a retry safe, so it must never change and never be reused for another application.",
+      ),
+    job_id: z
+      .string()
+      .min(1)
+      .max(200)
+      .describe(
+        "The job posting's id in your system, with the same limits. Use an id that stays the same for the life of the posting (a database row id, not an editable slug): the organization maps it to what the applicant is asked to verify.",
+      ),
+    job_title: z
+      .string()
+      .optional()
+      .describe('Optional. Used only to label a job the organization has not mapped yet.'),
+    candidate: z.object({
+      name: z.string().nullish().describe('Optional. Used to greet the applicant.'),
+      email: z
+        .string()
+        .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+        .describe('Required. Where the applicant is invited, unless the organization takes the link in the response instead.'),
+    }),
+  })
+  .describe(
+    'One application from your system. Fields not listed here are ignored and not stored; do not send more than this. The organization comes from the API key, never from the body.',
+  );
+export type IntakeApplicationRequest = z.infer<typeof intakeApplicationRequestSchema>;
+
+/**
+ * POST /digavouch/v1/intake/applications: the success body, on 201
+ * (`created`) and on 200 (`existing`, a repeat of an application already
+ * received with the same email address).
+ *
+ * `verification_link` and `verification_link_expires_at` appear only on a 201,
+ * and only when the organization takes the link in the response. They never
+ * appear on a 200: the link is stored only in a form that cannot be turned
+ * back into the link, so a repeat cannot return it.
+ */
+export const intakeApplicationResponseSchema = z
+  .object({
+    case_id: z.string().describe('The case id. Use it to read the result and to issue a fresh applicant link.'),
+    outcome: z
+      .enum(['created', 'existing'])
+      .describe('`created`: a new case (201). `existing`: this application id already has a case for this email address (200); nothing new was created and no second invite was sent.'),
+    verification_link: z
+      .string()
+      .optional()
+      .describe(
+        "The applicant's link, on a 201 only, and only when the organization takes the link in the response instead of, or as well as, an email. It is a credential to the applicant's session: give it only to the applicant, and do not log or store it.",
+      ),
+    verification_link_expires_at: z
+      .string()
+      .optional()
+      .describe('When the link expires (ISO 8601). Sent with `verification_link`.'),
+  })
+  .describe('The case this application created or already had.');
+export type IntakeApplicationResponse = z.infer<typeof intakeApplicationResponseSchema>;
+
+/**
+ * POST /digavouch/v1/inquiries/:inquiry_id/session: the 201 body.
+ *
+ * The response also carries `session_token`, the same token that ends
+ * `verification_link`. It is not part of the contract: the link is what a
+ * partner hands on, and one copy of a credential is enough.
+ */
+export const inquirySessionResponseSchema = z
+  .object({
+    verification_link: z
+      .string()
+      .describe(
+        "A new link for the applicant, valid for 72 hours. No email is sent: deliver it yourself. It is a credential to the applicant's session: give it only to the applicant, and do not log or store it.",
+      ),
+    inquiry_id: z.string().describe('The case id.'),
+    org_id: z.string().describe("The organization's id."),
+  })
+  .describe(
+    'A fresh applicant link. The response also carries `session_token`, the token at the end of the link; it is not part of the contract and may disappear in a MAJOR version.',
+  );
+export type InquirySessionResponse = z.infer<typeof inquirySessionResponseSchema>;
+
+/**
+ * One case in GET /api/v1/orgs/:org_id/inquiries.
+ *
+ * Each row also carries `person_id`, an internal identifier no partner route
+ * takes; it is not part of the contract.
+ */
+export const inquiryListItemSchema = z
+  .object({
+    inquiry_id: z.string().describe('The case id.'),
+    org_id: z.string(),
+    status: z
+      .string()
+      .describe(
+        "The case's processing state. `decided` means the organization's reviewer recorded a decision (see `operator_action`). The set is open: read any other value as not decided, and read the result for the facts.",
+      ),
+    source: z.string().describe('How the case was created, such as `api` or `ats_sync`. The set is open.'),
+    operator_action: z
+      .string()
+      .nullable()
+      .describe(
+        "The organization's reviewer decision: `approved`, `denied`, `escalated` or `requested_more_info`. null until one is recorded.",
+      ),
+    operator_action_at: z.string().nullable().describe('When that decision was recorded. null until then.'),
+    created_at: z.string(),
+    updated_at: z.string(),
+    applicant_name: z.string().nullable(),
+  })
+  .describe(
+    'One case, newest first. Each row also carries `person_id`, which no partner route takes; it is not part of the contract.',
+  );
+export type InquiryListItem = z.infer<typeof inquiryListItemSchema>;
+
+/** GET /api/v1/orgs/:org_id/inquiries: the 200 body. */
+export const inquiryListResponseSchema = z
+  .object({
+    inquiries: z.array(inquiryListItemSchema).describe('Every case the organization has not deleted, newest first. There is no paging.'),
+    total: z.number().describe('The number of cases in `inquiries`.'),
+  })
+  .describe("The organization's cases.");
+export type InquiryListResponse = z.infer<typeof inquiryListResponseSchema>;
 
 /**
  * Every machine-readable error code a partner-facing route returns. Closed: a
@@ -538,7 +710,11 @@ export const PARTNER_ERROR_CODES = [
   // 500: an unexpected error. Retry with backoff (see the retry rule above).
   'INTERNAL_ERROR',
 ] as const;
-export const partnerErrorCodeSchema = z.enum(PARTNER_ERROR_CODES);
+export const partnerErrorCodeSchema = z
+  .enum(PARTNER_ERROR_CODES)
+  .describe(
+    'For machines; a code never changes meaning. The list is closed, and adding a code is a new contract package version: branch on the HTTP status first and the code second, and treat an unknown code by its status. FORBIDDEN and ORG_MISMATCH mean the same thing, as do NOT_FOUND and INQUIRY_NOT_FOUND; both of each pair stay because existing callers receive them.',
+  );
 export type PartnerErrorCode = z.infer<typeof partnerErrorCodeSchema>;
 
 /**
@@ -551,11 +727,21 @@ export type PartnerErrorCode = z.infer<typeof partnerErrorCodeSchema>;
  * fields (`error`, `statusCode`) kept for existing callers; they are not part
  * of the contract.
  */
-export const partnerErrorSchema = z.object({
-  code: partnerErrorCodeSchema,
-  message: z.string(),
-  field: z.string().optional(),
-  // On a 429 only.
-  retry_after_seconds: z.number().optional(),
-});
+export const partnerErrorSchema = z
+  .object({
+    code: partnerErrorCodeSchema,
+    message: z
+      .string()
+      .describe(
+        "For people. May be reworded. Never contains the applicant's or a voucher's personal data, so it is safe to log or pass on.",
+      ),
+    field: z
+      .string()
+      .optional()
+      .describe('On INVALID_REQUEST, the field that is missing or invalid, as a dotted path, when known.'),
+    retry_after_seconds: z.number().optional().describe('On a 429 only: how many seconds to wait before retrying.'),
+  })
+  .describe(
+    'The error body of every partner route. Retry rule: retry a 429 after `retry_after_seconds`, and INTERNAL_ERROR with the same request a few times with backoff; never retry any other code unchanged. Some responses also carry older fields (`error`, `statusCode`) kept for existing callers; they are not part of the contract.',
+  );
 export type PartnerError = z.infer<typeof partnerErrorSchema>;

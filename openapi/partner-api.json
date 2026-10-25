@@ -1,0 +1,1252 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Partner API",
+    "version": "0.1.13",
+    "description": "The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.\n\n**Authentication.** Every route takes the organization's API key in the `X-API-Key` header. The key belongs to one organization and decides which organization a request acts for. Do not send an `Authorization` header: when present it is read instead of the key, and these routes then refuse the request.\n\n**Two names for one id.** A case id is called `case_id` when a case is created and `inquiry_id` everywhere else. They are the same value.\n\n**Facts, not ratings.** The result reports what was verified, what is pending, who vouched and what they said, and what happened when. It carries no score, zone, recommendation or confidence.\n\n**Errors.** Every error body has a `code` from a closed list, a `message` for people, and on a field error a `field`. Branch on the HTTP status first and the code second, and treat a code you do not know by its status. Some error bodies also carry older fields (`error`, `statusCode`); they are not part of the contract.\n\n**Retries.** Retry a 429 after `retry_after_seconds`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.\n\n**Limits.** 1000 requests a minute per organization key. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the window resets), so you can slow down before a 429.\n\n**Versioning.** The result carries `schema_version`; see its description. Fields not listed in this document may appear in responses: ignore them."
+  },
+  "servers": [
+    {
+      "url": "https://api.digavouch.com"
+    }
+  ],
+  "security": [
+    {
+      "ApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Cases"
+    }
+  ],
+  "paths": {
+    "/digavouch/v1/intake/applications": {
+      "post": {
+        "operationId": "createCaseFromApplication",
+        "summary": "Create a case from an application",
+        "tags": [
+          "Cases"
+        ],
+        "description": "Sends one application from your system. The first time an application id is seen, a case is created and the applicant is invited (201). Sending the same application id again with the same email address returns the same case (200) and invites nobody, so a request that timed out can be retried as it is.\n\nHow the applicant is reached is the organization's setting: an email from us, the link in this response (`verification_link`), or both. The link is in the 201 only. If the organization takes the link in the response and a 201 is lost in transit, the retry's 200 carries no link: issue a fresh applicant link for the case instead.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgSelection"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntakeApplicationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "This application id already has a case for this email address. `outcome` is `existing`; nothing was created, nobody was invited, and there is no link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeApplicationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new case. The applicant is invited, or the link is in the body, as the organization chose.",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store` when the body carries `verification_link`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeApplicationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A field is missing or invalid (INVALID_REQUEST, with `field`: `body`, `application_id`, `job_id`, `candidate` or `candidate.email`), or the `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_REQUEST",
+                            "ORG_SELECTION_INVALID"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `X-API-Key` header, or the key is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_AUTH"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A person's login was sent instead of an API key (API_KEY_REQUIRED), or the `X-DigaVouch-Org` header names an organization this key is not for (ORG_SELECTION_FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "API_KEY_REQUIRED",
+                            "ORG_SELECTION_FORBIDDEN"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This application id already has a case for a different email address (APPLICATION_EMAIL_MISMATCH), or its case was deleted by the organization and is not recreated (CASE_DELETED). Nothing was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "APPLICATION_EMAIL_MISMATCH",
+                            "CASE_DELETED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than 1 MB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_REQUEST"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_REQUEST"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The organization has not mapped this job and does not accept unmapped jobs. The job is recorded for the organization; no case was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "UNMAPPED_JOB"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: more than 1000 a minute for this organization's key, or 300 a minute from one address without a valid key. Wait `retry_after_seconds` (the same value as the `Retry-After` header), then retry the same request.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Requests allowed in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requests left in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "RATE_LIMIT_EXCEEDED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The organization's account is missing a setting this job needs (NO_DEFAULT_CAMPAIGN): retrying does not help, contact support. Or an unexpected error (INTERNAL_ERROR): retry the same request a few times with backoff. A body that is not valid JSON also returns INTERNAL_ERROR today: check the body before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "NO_DEFAULT_CAMPAIGN",
+                            "INTERNAL_ERROR"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inquiries/{inquiry_id}/result": {
+      "get": {
+        "operationId": "getCaseResult",
+        "summary": "Get a case's result",
+        "tags": [
+          "Cases"
+        ],
+        "description": "The facts of one case as they are when you read it. Read it again to see changes.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InquiryId"
+          },
+          {
+            "$ref": "#/components/parameters/OrgSelection"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The case.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "ORG_SELECTION_INVALID"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `X-API-Key` header, or the key is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_AUTH"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The case belongs to another organization (FORBIDDEN), or the `X-DigaVouch-Org` header names an organization this key is not for (ORG_SELECTION_FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "FORBIDDEN",
+                            "ORG_SELECTION_FORBIDDEN"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such case, or the organization deleted it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "NOT_FOUND"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: more than 1000 a minute for this organization's key, or 300 a minute from one address without a valid key. Wait `retry_after_seconds` (the same value as the `Retry-After` header), then retry the same request.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Requests allowed in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requests left in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "RATE_LIMIT_EXCEEDED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff. A path id that is not a UUID also returns this today: check the id before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INTERNAL_ERROR"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/digavouch/v1/inquiries/{inquiry_id}/session": {
+      "post": {
+        "operationId": "createApplicantLink",
+        "summary": "Issue a fresh applicant link",
+        "tags": [
+          "Cases"
+        ],
+        "description": "A new link for the applicant of an existing case, for example when the first one expired or never arrived. No email is sent: deliver the link yourself. Earlier links are not revoked; each stays valid until it expires. Send no body. Today a case the organization deleted still gets a link here (201), although its result answers 404: check the result first if that matters to you.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InquiryId"
+          },
+          {
+            "$ref": "#/components/parameters/OrgSelection"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The new link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquirySessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "ORG_SELECTION_INVALID"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `X-API-Key` header, or the key is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_AUTH"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The case belongs to another organization (ORG_MISMATCH), or the `X-DigaVouch-Org` header names an organization this key is not for (ORG_SELECTION_FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "ORG_MISMATCH",
+                            "ORG_SELECTION_FORBIDDEN"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such case.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INQUIRY_NOT_FOUND"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The organization's reviewer has recorded a decision on this case, so no new link is issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INQUIRY_DECIDED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: more than 1000 a minute for this organization's key, or 300 a minute from one address without a valid key. Wait `retry_after_seconds` (the same value as the `Retry-After` header), then retry the same request.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Requests allowed in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requests left in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "RATE_LIMIT_EXCEEDED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff. A path id that is not a UUID also returns this today: check the id before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INTERNAL_ERROR"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orgs/{org_id}/inquiries": {
+      "get": {
+        "operationId": "listCases",
+        "summary": "List cases",
+        "tags": [
+          "Cases"
+        ],
+        "description": "The organization's cases, newest first, without paging. Deleted cases are left out.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Only cases in this processing state, such as `decided`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OrgSelection"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cases.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The `X-DigaVouch-Org` header is present but is not an organization id (ORG_SELECTION_INVALID).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "ORG_SELECTION_INVALID"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `X-API-Key` header, or the key is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_AUTH"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`org_id` is not the key's organization (ORG_MISMATCH), or the `X-DigaVouch-Org` header names an organization this key is not for (ORG_SELECTION_FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "ORG_MISMATCH",
+                            "ORG_SELECTION_FORBIDDEN"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: more than 1000 a minute for this organization's key, or 300 a minute from one address without a valid key. Wait `retry_after_seconds` (the same value as the `Retry-After` header), then retry the same request.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Requests allowed in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requests left in the window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "RATE_LIMIT_EXCEEDED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected error (INTERNAL_ERROR). Retry the same request a few times with backoff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PartnerError"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INTERNAL_ERROR"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "The organization's API key. Keep it on your servers; never send it to a browser or an app."
+      }
+    },
+    "parameters": {
+      "InquiryId": {
+        "name": "inquiry_id",
+        "in": "path",
+        "required": true,
+        "description": "The case id: `case_id` from creating a case, or `inquiry_id` from the case list.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "OrgId": {
+        "name": "org_id",
+        "in": "path",
+        "required": true,
+        "description": "Your organization's id, given with your API key. It must be the key's own organization.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "OrgSelection": {
+        "name": "X-DigaVouch-Org",
+        "in": "header",
+        "required": false,
+        "description": "Optional. An organization id; with an API key it may only repeat the key's own organization. Send it if you want a request refused, rather than answered, when it would act for an organization other than the one you meant.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "schemas": {
+      "IntakeApplicationRequest": {
+        "type": "object",
+        "properties": {
+          "application_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The application's id in your system: required, not blank, at most 200 characters after trimming. It is the key that makes a retry safe, so it must never change and never be reused for another application."
+          },
+          "job_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The job posting's id in your system, with the same limits. Use an id that stays the same for the life of the posting (a database row id, not an editable slug): the organization maps it to what the applicant is asked to verify."
+          },
+          "job_title": {
+            "type": "string",
+            "description": "Optional. Used only to label a job the organization has not mapped yet."
+          },
+          "candidate": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Optional. Used to greet the applicant."
+              },
+              "email": {
+                "type": "string",
+                "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                "description": "Required. Where the applicant is invited, unless the organization takes the link in the response instead."
+              }
+            },
+            "required": [
+              "email"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "application_id",
+          "job_id",
+          "candidate"
+        ],
+        "additionalProperties": true,
+        "description": "One application from your system. Fields not listed here are ignored and not stored; do not send more than this. The organization comes from the API key, never from the body."
+      },
+      "IntakeApplicationResponse": {
+        "type": "object",
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "description": "The case id. Use it to read the result and to issue a fresh applicant link."
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "existing"
+            ],
+            "description": "`created`: a new case (201). `existing`: this application id already has a case for this email address (200); nothing new was created and no second invite was sent."
+          },
+          "verification_link": {
+            "type": "string",
+            "description": "The applicant's link, on a 201 only, and only when the organization takes the link in the response instead of, or as well as, an email. It is a credential to the applicant's session: give it only to the applicant, and do not log or store it."
+          },
+          "verification_link_expires_at": {
+            "type": "string",
+            "description": "When the link expires (ISO 8601). Sent with `verification_link`."
+          }
+        },
+        "required": [
+          "case_id",
+          "outcome"
+        ],
+        "additionalProperties": true,
+        "description": "The case this application created or already had."
+      },
+      "InquiryResultResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "pattern": "^1\\.\\d+\\.\\d+$",
+            "description": "The result contract version this response follows. MINOR adds a field (ignore fields you do not know); MAJOR removes, renames or changes one."
+          },
+          "inquiry_id": {
+            "type": "string",
+            "description": "The case id."
+          },
+          "applicant": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "email_domain": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The domain of the verified email address, once one is verified."
+              }
+            },
+            "required": [
+              "name",
+              "email_domain"
+            ],
+            "additionalProperties": true
+          },
+          "signals_summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultSignal"
+            }
+          },
+          "verification_progress": {
+            "type": "object",
+            "properties": {
+              "current_step": {
+                "type": "number"
+              },
+              "steps_completed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "steps_total": {
+                "type": "number"
+              },
+              "percent_complete": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "steps_completed",
+              "steps_total",
+              "percent_complete"
+            ],
+            "additionalProperties": true,
+            "description": "How far the applicant is through their steps. All zero before the applicant has a link."
+          },
+          "submitted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the applicant submitted. null until then."
+          },
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the organization's reviewer recorded a decision. null until then."
+          },
+          "operator_action": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The organization's reviewer decision: `approved`, `denied`, `escalated` or `requested_more_info`. null until one is recorded."
+          },
+          "vouchers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultVoucher"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultEvent"
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "inquiry_id",
+          "applicant",
+          "signals_summary",
+          "verification_progress",
+          "submitted_at",
+          "decided_at",
+          "operator_action",
+          "vouchers",
+          "events"
+        ],
+        "additionalProperties": true,
+        "description": "The facts of one case: what was verified, what is pending, who vouched and what they said, and what happened when. No score, zone, recommendation, per-item confidence or score breakdown, under this contract version or any 1.x. A response may carry older fields this schema does not declare (`applicant.dob`, `applicant.property`, `vouchers[].voucher_email`); they are not part of the contract and may disappear in a MAJOR version."
+      },
+      "ResultSignal": {
+        "$ref": "#/components/schemas/InquiryResultResponse/properties/signals_summary/items"
+      },
+      "ResultVoucher": {
+        "$ref": "#/components/schemas/InquiryResultResponse/properties/vouchers/items"
+      },
+      "ResultEvent": {
+        "$ref": "#/components/schemas/InquiryResultResponse/properties/events/items"
+      },
+      "InquirySessionResponse": {
+        "type": "object",
+        "properties": {
+          "verification_link": {
+            "type": "string",
+            "description": "A new link for the applicant, valid for 72 hours. No email is sent: deliver it yourself. It is a credential to the applicant's session: give it only to the applicant, and do not log or store it."
+          },
+          "inquiry_id": {
+            "type": "string",
+            "description": "The case id."
+          },
+          "org_id": {
+            "type": "string",
+            "description": "The organization's id."
+          }
+        },
+        "required": [
+          "verification_link",
+          "inquiry_id",
+          "org_id"
+        ],
+        "additionalProperties": true,
+        "description": "A fresh applicant link. The response also carries `session_token`, the token at the end of the link; it is not part of the contract and may disappear in a MAJOR version."
+      },
+      "InquiryListResponse": {
+        "type": "object",
+        "properties": {
+          "inquiries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InquiryListItem"
+            },
+            "description": "Every case the organization has not deleted, newest first. There is no paging."
+          },
+          "total": {
+            "type": "number",
+            "description": "The number of cases in `inquiries`."
+          }
+        },
+        "required": [
+          "inquiries",
+          "total"
+        ],
+        "additionalProperties": true,
+        "description": "The organization's cases."
+      },
+      "InquiryListItem": {
+        "$ref": "#/components/schemas/InquiryListResponse/properties/inquiries/items"
+      },
+      "PartnerError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_REQUEST",
+              "ORG_SELECTION_INVALID",
+              "INVALID_AUTH",
+              "API_KEY_REQUIRED",
+              "FORBIDDEN",
+              "ORG_MISMATCH",
+              "ORG_SELECTION_FORBIDDEN",
+              "NOT_FOUND",
+              "INQUIRY_NOT_FOUND",
+              "INQUIRY_DECIDED",
+              "APPLICATION_EMAIL_MISMATCH",
+              "CASE_DELETED",
+              "UNMAPPED_JOB",
+              "RATE_LIMIT_EXCEEDED",
+              "NO_DEFAULT_CAMPAIGN",
+              "INTERNAL_ERROR"
+            ],
+            "description": "For machines; a code never changes meaning. The list is closed, and adding a code is a new contract package version: branch on the HTTP status first and the code second, and treat an unknown code by its status. FORBIDDEN and ORG_MISMATCH mean the same thing, as do NOT_FOUND and INQUIRY_NOT_FOUND; both of each pair stay because existing callers receive them."
+          },
+          "message": {
+            "type": "string",
+            "description": "For people. May be reworded. Never contains the applicant's or a voucher's personal data, so it is safe to log or pass on."
+          },
+          "field": {
+            "type": "string",
+            "description": "On INVALID_REQUEST, the field that is missing or invalid, as a dotted path, when known."
+          },
+          "retry_after_seconds": {
+            "type": "number",
+            "description": "On a 429 only: how many seconds to wait before retrying."
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": true,
+        "description": "The error body of every partner route. Retry rule: retry a 429 after `retry_after_seconds`, and INTERNAL_ERROR with the same request a few times with backoff; never retry any other code unchanged. Some responses also carry older fields (`error`, `statusCode`) kept for existing callers; they are not part of the contract."
+      }
+    }
+  }
+}
