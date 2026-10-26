@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Partner API",
-    "version": "0.1.14",
+    "version": "0.1.15",
     "description": "The routes an integration partner uses to start a case for an applicant, follow it, and read its facts.\n\n**Authentication.** Every route takes the organization's API key in the `X-API-Key` header. The key belongs to one organization and decides which organization a request acts for. A request that carries the key is answered only as this document describes: an `Authorization` header on it is ignored. A request with an `Authorization` header and no key is a person's login, not a partner request, and is not described here beyond intake refusing it (API_KEY_REQUIRED).\n\n**Two names for one id.** A case id is called `case_id` when a case is created and `inquiry_id` everywhere else. They are the same value.\n\n**Facts, not ratings.** The result reports what was verified, what is pending, who vouched and what they said, and what happened when. It carries no score, zone, recommendation or confidence.\n\n**Errors.** Every error body has a `code` from a closed list, a `message` for people, and on a field error a `field`. Branch on the HTTP status first and the code second, and treat a code you do not know by its status. Some error bodies also carry older fields (`error`, `statusCode`); they are not part of the contract.\n\n**Retries.** Retry a 429 after `retry_after_seconds`. Retry a 500 INTERNAL_ERROR with the same request a few times with backoff. Do not retry any other error unchanged. Creating a case is safe to retry: the application id makes a repeat return the same case.\n\n**Limits.** 1000 requests a minute per organization key. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the window resets), so you can slow down before a 429.\n\n**Versioning.** The result carries `schema_version`; see its description. Fields not listed in this document may appear in responses: ignore them."
   },
   "servers": [
@@ -975,18 +975,18 @@
             "description": "The job posting's id in your system, with the same limits. Use an id that stays the same for the life of the posting (a database row id, not an editable slug): the organization maps it to what the applicant is asked to verify."
           },
           "job_title": {
-            "type": "string",
-            "description": "Optional. Used only to label a job the organization has not mapped yet."
+            "description": "Optional. Used only to label a job the organization has not mapped yet.",
+            "type": "string"
           },
           "candidate": {
             "type": "object",
             "properties": {
               "name": {
+                "description": "Optional. Used to greet the applicant.",
                 "type": [
                   "string",
                   "null"
-                ],
-                "description": "Optional. Used to greet the applicant."
+                ]
               },
               "email": {
                 "type": "string",
@@ -1024,12 +1024,12 @@
             "description": "`created`: a new case (201). `existing`: this application id already has a case for this email address (200); nothing new was created and no second invite was sent."
           },
           "verification_link": {
-            "type": "string",
-            "description": "The applicant's link, on a 201 only, and only when the organization takes the link in the response instead of, or as well as, an email. It is a credential to the applicant's session: give it only to the applicant, and do not log or store it."
+            "description": "The applicant's link, on a 201 only, and only when the organization takes the link in the response instead of, or as well as, an email. It is a credential to the applicant's session: give it only to the applicant, and do not log or store it.",
+            "type": "string"
           },
           "verification_link_expires_at": {
-            "type": "string",
-            "description": "When the link expires (ISO 8601). Sent with `verification_link`."
+            "description": "When the link expires (ISO 8601). Sent with `verification_link`.",
+            "type": "string"
           }
         },
         "required": [
@@ -1058,11 +1058,11 @@
                 "type": "string"
               },
               "email_domain": {
+                "description": "The domain of the verified email address, once one is verified.",
                 "type": [
                   "string",
                   "null"
-                ],
-                "description": "The domain of the verified email address, once one is verified."
+                ]
               }
             },
             "required": [
@@ -1105,25 +1105,25 @@
             "description": "How far the applicant is through their steps. All zero before the applicant has a link."
           },
           "submitted_at": {
+            "description": "When the applicant submitted. null until then.",
             "type": [
               "string",
               "null"
-            ],
-            "description": "When the applicant submitted. null until then."
+            ]
           },
           "decided_at": {
+            "description": "When the organization's reviewer recorded a decision. null until then.",
             "type": [
               "string",
               "null"
-            ],
-            "description": "When the organization's reviewer recorded a decision. null until then."
+            ]
           },
           "operator_action": {
+            "description": "The organization's reviewer decision: `approved`, `denied`, `escalated` or `requested_more_info`. null until one is recorded.",
             "type": [
               "string",
               "null"
-            ],
-            "description": "The organization's reviewer decision: `approved`, `denied`, `escalated` or `requested_more_info`. null until one is recorded."
+            ]
           },
           "vouchers": {
             "type": "array",
@@ -1154,13 +1154,163 @@
         "description": "The facts of one case: what was verified, what is pending, who vouched and what they said, and what happened when. No score, zone, recommendation, per-item confidence or score breakdown, under this contract version or any 1.x. A response may carry older fields this schema does not declare (`applicant.dob`, `applicant.property`, `vouchers[].voucher_email`); they are not part of the contract and may disappear in a MAJOR version."
       },
       "ResultSignal": {
-        "$ref": "#/components/schemas/InquiryResultResponse/properties/signals_summary/items"
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "A stable key for the kind of evidence, such as `contact.email` or `digital.email_history`."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "pending"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "A short human line describing what was verified. For a pending item, \"Not yet verified\"."
+          },
+          "verified_at": {
+            "description": "When the evidence was collected. null while pending.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail",
+          "verified_at"
+        ],
+        "additionalProperties": true,
+        "description": "One piece of evidence the organization asks for, and whether it has been verified yet."
       },
       "ResultVoucher": {
-        "$ref": "#/components/schemas/InquiryResultResponse/properties/vouchers/items"
+        "type": "object",
+        "properties": {
+          "invitation_id": {
+            "type": "string"
+          },
+          "voucher_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "The invitation's state. `accepted` means the voucher opened the link, not that they answered: see `outcome`."
+          },
+          "outcome": {
+            "description": "Whether the voucher confirmed the applicant: `confirm`, `decline` or `unable_to_confirm`. null until they respond. The set is open: treat an unknown value as \"responded, outcome not recognized\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome_notes": {
+            "description": "The voucher's own words, if they left any.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qa_responses": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The voucher's answers to the organization's questions, keyed by question."
+          },
+          "outcome_recorded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sent_at": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "voucher_name",
+          "relationship",
+          "status",
+          "outcome",
+          "outcome_notes",
+          "qa_responses",
+          "outcome_recorded_at",
+          "sent_at",
+          "expires_at"
+        ],
+        "additionalProperties": true,
+        "description": "A reference (voucher) the applicant invited."
       },
       "ResultEvent": {
-        "$ref": "#/components/schemas/InquiryResultResponse/properties/events/items"
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "What happened. Kinds sent today: `verification_link_sent`, `verification_link_resent`, `verification_submitted`, `email_verified`, `phone_verified`, `email_history_verified`, `social_account_verified`, `developer_account_verified`, `identity_verified`, `income_verified`, `vouch_invited`, `vouch_responded`, `identity_confidence_established`, `identity_confidence_not_established`, `additional_verification_requested`, `applicant_opted_out`, `case_closed`, `operator_requested_more_info`, `operator_sent_reminder`, `operator_added_note`, `operator_case_reopened`. The set is open: show an unknown kind generically rather than fail. `identity_confidence_established`, `identity_confidence_not_established` and `additional_verification_requested` record the organization's own reviewer decision, not a judgement made by the service."
+          },
+          "at": {
+            "type": "string"
+          },
+          "detail": {
+            "description": "A short human subtitle for the row, when there is one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "applicant",
+                  "operator",
+                  "voucher",
+                  "system"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_id": {
+            "description": "The id of the thing the event is about: the case, an invitation, an evidence type or a reviewer action.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "detail",
+          "actor",
+          "source_id"
+        ],
+        "additionalProperties": true,
+        "description": "One row of the activity stream. The stream is oldest first."
       },
       "InquirySessionResponse": {
         "type": "object",
@@ -1209,7 +1359,63 @@
         "description": "The organization's cases."
       },
       "InquiryListItem": {
-        "$ref": "#/components/schemas/InquiryListResponse/properties/inquiries/items"
+        "type": "object",
+        "properties": {
+          "inquiry_id": {
+            "type": "string",
+            "description": "The case id."
+          },
+          "org_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "The case's processing state. `decided` means the organization's reviewer recorded a decision (see `operator_action`). The set is open: read any other value as not decided, and read the result for the facts."
+          },
+          "source": {
+            "type": "string",
+            "description": "How the case was created, such as `api` or `ats_sync`. The set is open."
+          },
+          "operator_action": {
+            "description": "The organization's reviewer decision: `approved`, `denied`, `escalated` or `requested_more_info`. null until one is recorded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operator_action_at": {
+            "description": "When that decision was recorded. null until then.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "applicant_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "inquiry_id",
+          "org_id",
+          "status",
+          "source",
+          "operator_action",
+          "operator_action_at",
+          "created_at",
+          "updated_at",
+          "applicant_name"
+        ],
+        "additionalProperties": true,
+        "description": "One case, newest first. Each row also carries `person_id`, which no partner route takes; it is not part of the contract."
       },
       "PartnerError": {
         "type": "object",
@@ -1241,12 +1447,12 @@
             "description": "For people. May be reworded. Never contains the applicant's or a voucher's personal data, so it is safe to log or pass on."
           },
           "field": {
-            "type": "string",
-            "description": "On INVALID_REQUEST, the field that is missing or invalid, as a dotted path, when known."
+            "description": "On INVALID_REQUEST, the field that is missing or invalid, as a dotted path, when known.",
+            "type": "string"
           },
           "retry_after_seconds": {
-            "type": "number",
-            "description": "On a 429 only: how many seconds to wait before retrying."
+            "description": "On a 429 only: how many seconds to wait before retrying.",
+            "type": "number"
           }
         },
         "required": [

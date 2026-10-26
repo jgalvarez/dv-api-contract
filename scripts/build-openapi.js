@@ -20,7 +20,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const SwaggerParser = require('@apidevtools/swagger-parser');
-const { zodToJsonSchema } = require('zod-to-json-schema');
+const { z } = require('zod');
 const contract = require('../dist/index.js');
 const { version } = require('../package.json');
 
@@ -43,20 +43,29 @@ const COMPONENT_SCHEMAS = {
   PartnerError: contract.partnerErrorSchema,
 };
 
-/** One component, with every other component it contains as a $ref. */
-function toComponent(name) {
-  const others = Object.fromEntries(Object.entries(COMPONENT_SCHEMAS).filter(([n]) => n !== name));
-  const json = zodToJsonSchema(COMPONENT_SCHEMAS[name], {
-    target: 'jsonSchema2019-09',
-    // An object schema stays open: a consumer must ignore fields it does not
-    // know (the result contract's MINOR rule), and the routes ignore request
-    // fields they do not read.
-    removeAdditionalStrategy: 'strict',
-    definitions: others,
+/** Every component, each containing the others it uses as a $ref. */
+function toComponents() {
+  const registry = z.registry();
+  for (const [id, schema] of Object.entries(COMPONENT_SCHEMAS)) registry.add(schema, { id });
+  const { schemas } = z.toJSONSchema(registry, {
+    target: 'draft-2020-12',
+    uri: (id) => `#/components/schemas/${id}`,
+    override: (ctx) => {
+      // An object schema stays open: a consumer must ignore fields it does not
+      // know (the result contract's MINOR rule), and the routes ignore request
+      // fields they do not read. zod writes `false` for an object that strips
+      // unknown keys; this keeps a `.strict()` object closed.
+      const def = ctx.zodSchema._zod.def;
+      if (def.type === 'object' && def.catchall === undefined) ctx.jsonSchema.additionalProperties = true;
+    },
   });
-  delete json.$schema;
-  delete json.definitions;
-  return JSON.parse(JSON.stringify(json).replace(/"#\/definitions\//g, '"#/components/schemas/'));
+  for (const [name, json] of Object.entries(schemas)) {
+    delete json.$schema;
+    delete json.$id;
+    // A component that is only a $ref describes nothing a reader can use.
+    if (json.$ref) throw new Error(`${name} is only a $ref (${json.$ref}), not a schema`);
+  }
+  return schemas;
 }
 
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
@@ -165,7 +174,7 @@ const INFO_DESCRIPTION = `The routes an integration partner uses to start a case
 **Versioning.** The result carries \`schema_version\`; see its description. Fields not listed in this document may appear in responses: ignore them.`;
 
 function buildDocument() {
-  const schemas = Object.fromEntries(Object.keys(COMPONENT_SCHEMAS).map((n) => [n, toComponent(n)]));
+  const schemas = toComponents();
 
   const doc = {
     openapi: '3.1.0',

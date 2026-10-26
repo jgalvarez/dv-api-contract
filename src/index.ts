@@ -78,7 +78,7 @@ export const sessionDetailResponseSchema = z.object({
     .object({
       inquiry_id: z.string(),
       status: z.string().optional(),
-      metadata: z.record(z.unknown()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
       declined_at: z.string().nullish(),
       decline_reason: z.string().nullish(),
     })
@@ -403,7 +403,7 @@ export const resultVoucherSchema = z
       ),
     outcome_notes: z.string().nullable().describe("The voucher's own words, if they left any."),
     qa_responses: z
-      .record(z.unknown())
+      .record(z.string(), z.unknown())
       .nullable()
       .describe("The voucher's answers to the organization's questions, keyed by question."),
     outcome_recorded_at: z.string().nullable(),
