@@ -244,6 +244,220 @@ export const caseReviewOpenQuestionSchema = z.object({
 });
 export type CaseReviewOpenQuestion = z.infer<typeof caseReviewOpenQuestionSchema>;
 
+// ---------------------------------------------------------------------------
+// Evidence report (case review, recruiting organizations)
+//
+// One row per piece of evidence a case holds or asked for, plus the claims the
+// case never asked for. It carries codes only: the words a person reads are
+// the renderer's. Nothing in it is a rating, and rows are never ordered by
+// outcome or level.
+//
+// Versioning: adding a value to any code table below is a minor change, and
+// the server can send it before a consumer updates this package. A renderer
+// should show a value it does not know as not recorded rather than fail. The
+// schemas list only the values known at this version, so validating a
+// response with them rejects a newer value: validate with the package version
+// that matches the server, or render from the types without validating.
+// Renaming or removing a value, or changing what one means, is a new
+// `report_version`.
+// ---------------------------------------------------------------------------
+
+export const EVIDENCE_REPORT_VERSION = '1' as const;
+
+/** What a row is about. One claim can have several sources. */
+export const reportClaimSchema = z.enum([
+  'email_control',
+  'phone_control',
+  'online_account',
+  'identity_records',
+  'identity_document',
+  'identity_selfie',
+  'bank_account_holder',
+  'employment',
+  'vouch',
+]);
+export type ReportClaim = z.infer<typeof reportClaimSchema>;
+
+/** Whether the case required the evidence, offered it as optional, or never asked for it. */
+export const reportAskedSchema = z.enum(['required', 'optional', 'not_asked']);
+export type ReportAsked = z.infer<typeof reportAskedSchema>;
+
+/** The outcome of one check. Never a judgement of the person. */
+export const reportOutcomeSchema = z.enum([
+  'verified',
+  'not_verified',
+  'inconclusive',
+  'self_asserted',
+  'requested',
+  'unavailable',
+  'declined',
+]);
+export type ReportOutcome = z.infer<typeof reportOutcomeSchema>;
+
+/** Whether the row still stands. Separate from the outcome. */
+export const reportValiditySchema = z.enum(['current', 'superseded', 'expired', 'revoked', 'disputed']);
+export type ReportValidity = z.infer<typeof reportValiditySchema>;
+
+/** How the evidence arrived. */
+export const evidenceMethodSchema = z.enum([
+  'self_declared',
+  'otp_challenge',
+  'oauth_server',
+  'oauth_form_post',
+  'oauth_client_sdk',
+  'vendor_redirect',
+  'human_attestation',
+  'agent_inference',
+]);
+export type EvidenceMethod = z.infer<typeof evidenceMethodSchema>;
+
+/** How the proof was obtained. An absent level means unknown, never the lowest level. */
+export const evidenceLevelSchema = z.enum(['self_declared', 'evidence_backed', 'independently_verified']);
+export type EvidenceLevel = z.infer<typeof evidenceLevelSchema>;
+
+/** Where the evidence came from. A closed key; a producer's own id is never passed through. */
+export const reportSourceSchema = z.enum([
+  'oauth_google',
+  'oauth_microsoft',
+  'oauth_linkedin',
+  'oauth_amazon',
+  'oauth_uber',
+  'oauth_facebook',
+  'oauth_apple',
+  'oauth_github',
+  'email_code',
+  'sms_code',
+  'plaid_idv',
+  'plaid_identity',
+  'plaid_income_payroll',
+  'plaid_income_document',
+  'plaid_income_bank',
+  'voucher',
+]);
+export type ReportSource = z.infer<typeof reportSourceSchema>;
+
+/**
+ * What `verified_at` means on a row. `source_checked`: when the source was
+ * checked. `recorded`: only when the record was written, which can be later.
+ */
+export const verifiedAtBasisSchema = z.enum(['source_checked', 'recorded']);
+export type VerifiedAtBasis = z.infer<typeof verifiedAtBasisSchema>;
+
+/**
+ * What a row does not establish. A missing code means nothing was recorded,
+ * not that nothing applies.
+ */
+export const reportLimitationSchema = z.enum([
+  'prior_year_figure',
+  'applicant_supplied_document',
+  'deposit_inference',
+  'pay_dates_not_recorded',
+  'payroll_name_not_compared',
+  'account_name_differs',
+  'account_name_partial',
+  'account_email_differs',
+  'id_name_differs',
+  'id_name_partial',
+  'id_name_not_compared',
+  'disposable_email_domain',
+  'relationship_stated_by_applicant',
+  'voucher_checks_none',
+  'single_pay_stub',
+]);
+export type ReportLimitation = z.infer<typeof reportLimitationSchema>;
+
+/**
+ * A field the record could have carried and did not, because the evidence was
+ * written before the field existed. Listed only on rows backed by a record.
+ */
+export const reportNotRecordedFieldSchema = z.enum([
+  'method',
+  'evidence_level',
+  'observed_period',
+  'verified_at',
+  'limitations',
+]);
+export type ReportNotRecordedField = z.infer<typeof reportNotRecordedFieldSchema>;
+
+/** The candidate's consent for this case. */
+export const reportConsentStateSchema = z.enum(['active', 'ended', 'withdrawn', 'not_given']);
+export type ReportConsentState = z.infer<typeof reportConsentStateSchema>;
+
+/** What the candidate typed or chose. Never what a source returned. */
+export const reportProvidedSchema = z.object({
+  name: z.string().nullish(),
+  email: z.string().nullish(),
+  voucher_name: z.string().optional(),
+  relationship: z.string().optional(),
+});
+export type ReportProvided = z.infer<typeof reportProvidedSchema>;
+
+/** The checks a voucher completed on their own run. */
+export const reportVoucherCheckSchema = z.enum(['email', 'identity', 'bank']);
+export type ReportVoucherCheck = z.infer<typeof reportVoucherCheckSchema>;
+
+/** What the source returned, through one allowed key set per claim. */
+export const reportFactsSchema = z.object({
+  domain_type: z.string().optional(),
+  country_code: z.string().optional(),
+  line_type: z.string().optional(),
+  account_name: z.string().nullish(),
+  email_domain: z.string().nullish(),
+  email_confirmed_by_provider: z.boolean().optional(),
+  /** The name comparison's outcome only: `match`, `partial`, `mismatch` or `unknown`. */
+  name_binding: z.string().optional(),
+  institution_name: z.string().nullish(),
+  employer_name: z.string().nullish(),
+  pay_frequency: z.string().nullish(),
+  tax_year: z.union([z.string(), z.number()]).nullish(),
+  /** Null when the voucher's own checks could not be read. */
+  voucher_checks: z.array(reportVoucherCheckSchema).nullish(),
+});
+export type ReportFacts = z.infer<typeof reportFactsSchema>;
+
+export const evidenceRowSchema = z.object({
+  /** Case-local: stable across reads of one case, different in every other case. */
+  row_ref: z.string(),
+  claim: reportClaimSchema,
+  asked: reportAskedSchema,
+  provided: reportProvidedSchema.nullable(),
+  facts: reportFactsSchema.nullable(),
+  outcome: reportOutcomeSchema,
+  validity: reportValiditySchema,
+  /** The `row_ref` of the newer row that replaced this one, when `validity` is `superseded`. */
+  superseded_by: z.string().nullable(),
+  /** Null: not recorded. */
+  method: evidenceMethodSchema.nullable(),
+  /** Null: not recorded. Never read as the lowest level. */
+  evidence_level: evidenceLevelSchema.nullable(),
+  /** Null on a row asked for and not provided yet, because a step can accept more than one source. */
+  source: reportSourceSchema.nullable(),
+  observed_from: z.string().nullable(),
+  observed_to: z.string().nullable(),
+  verified_at: z.string().nullable(),
+  verified_at_basis: verifiedAtBasisSchema.nullable(),
+  limitations: z.array(reportLimitationSchema),
+  not_recorded: z.array(reportNotRecordedFieldSchema),
+});
+export type EvidenceRow = z.infer<typeof evidenceRowSchema>;
+
+export const evidenceReportV1Schema = z.object({
+  report_version: z.literal(EVIDENCE_REPORT_VERSION),
+  /** The case's own id, which the organization already holds. */
+  case_ref: z.string(),
+  generated_at: z.string(),
+  consent: z.object({
+    state: reportConsentStateSchema,
+    /** When it ended or was withdrawn, where that is known. */
+    as_of: z.string().nullable(),
+  }),
+  case_declined_at: z.string().nullable(),
+  /** Ordered by the case's step order, then by date. Never by outcome or level. */
+  rows: z.array(evidenceRowSchema),
+  not_requested: z.array(reportClaimSchema),
+});
+export type EvidenceReportV1 = z.infer<typeof evidenceReportV1Schema>;
+
 export const caseReviewResponseSchema = z.object({
   applicant: z.object({ display_name: z.string() }),
   // The rating fields (`recommendation`, `confidence_label`, `zone`, and the
@@ -282,6 +496,9 @@ export const caseReviewResponseSchema = z.object({
   not_verified_reason: z.string().nullish(),
   not_verified_reason_label: z.string().nullish(),
   not_verified_note: z.string().nullish(),
+  // Sent to a recruiting organization only. Null when the report could not be
+  // built right now, which never means "nothing found".
+  evidence_report: evidenceReportV1Schema.nullable().optional(),
 });
 export type CaseReviewResponse = z.infer<typeof caseReviewResponseSchema>;
 
