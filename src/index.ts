@@ -462,21 +462,27 @@ export const caseReviewResponseSchema = z.object({
   applicant: z.object({ display_name: z.string() }),
   // The rating fields (`recommendation`, `confidence_label`, `zone`, and the
   // rating part of `confidence_panel`) are omitted for an organization that is
-  // not sent a rating. The evidence fields are sent either way.
+  // not sent a rating.
   recommendation: caseRecommendationSchema.optional(),
   confidence_label: confidenceLabelSchema.optional(),
   reviewer_note: z.string().nullable(),
-  connected_sources: z.array(caseReviewSourceSchema),
-  evidence_tree: z.object({
-    baseline: z.array(caseReviewEvidenceItemSchema),
-    digital: z.array(caseReviewEvidenceItemSchema),
-    human: z.array(caseReviewEvidenceItemSchema),
-    institutional: z.array(caseReviewEvidenceItemSchema),
-  }),
+  // Not sent to a recruiting organization, which receives `evidence_report`.
+  connected_sources: z.array(caseReviewSourceSchema).optional(),
+  // Not sent to a recruiting organization, which receives `evidence_report`.
+  evidence_tree: z
+    .object({
+      baseline: z.array(caseReviewEvidenceItemSchema),
+      digital: z.array(caseReviewEvidenceItemSchema),
+      human: z.array(caseReviewEvidenceItemSchema),
+      institutional: z.array(caseReviewEvidenceItemSchema),
+    })
+    .optional(),
   verification_timeline: z.array(caseReviewTimelineEventSchema),
   continuity_timeline: z.array(caseReviewContinuityItemSchema),
-  confidence_pillars: z.array(caseReviewPillarSchema),
-  open_questions: z.array(caseReviewOpenQuestionSchema),
+  // Not sent to a recruiting organization.
+  confidence_pillars: z.array(caseReviewPillarSchema).optional(),
+  // Not sent to a recruiting organization.
+  open_questions: z.array(caseReviewOpenQuestionSchema).optional(),
   actions_available: z.object({
     proceed: z.boolean(),
     hold: z.boolean(),
@@ -491,6 +497,7 @@ export const caseReviewResponseSchema = z.object({
     })
     .nullable()
     .optional(),
+  // Not sent to a recruiting organization, which receives `evidence_report`.
   confidence_panel: z.unknown().optional(),
   zone: z.string().nullish(),
   not_verified_reason: z.string().nullish(),
