@@ -1,6 +1,6 @@
 {
   "name": "dv-api-contract",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "private": false,
   "license": "UNLICENSED",
   "main": "dist/index.js",
