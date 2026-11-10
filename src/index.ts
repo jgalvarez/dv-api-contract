@@ -275,6 +275,7 @@ export const reportClaimSchema = z.enum([
   'bank_account_holder',
   'employment',
   'vouch',
+  'professional_license',
 ]);
 export type ReportClaim = z.infer<typeof reportClaimSchema>;
 
@@ -333,6 +334,7 @@ export const reportSourceSchema = z.enum([
   'plaid_income_document',
   'plaid_income_bank',
   'voucher',
+  'valyd',
 ]);
 export type ReportSource = z.infer<typeof reportSourceSchema>;
 
@@ -389,6 +391,10 @@ export const reportProvidedSchema = z.object({
   email: z.string().nullish(),
   voucher_name: z.string().optional(),
   relationship: z.string().optional(),
+  /** A professional license the candidate entered: its type, licensing state and the last four characters of its number. */
+  license_type: z.string().optional(),
+  license_state: z.string().optional(),
+  license_number_last4: z.string().optional(),
 });
 export type ReportProvided = z.infer<typeof reportProvidedSchema>;
 
@@ -412,6 +418,10 @@ export const reportFactsSchema = z.object({
   tax_year: z.union([z.string(), z.number()]).nullish(),
   /** Null when the voucher's own checks could not be read. */
   voucher_checks: z.array(reportVoucherCheckSchema).nullish(),
+  /** The license's status as the licensing source holds it, such as `active`. */
+  license_status: z.string().nullish(),
+  /** The license's expiry date, `YYYY-MM-DD`. */
+  license_expires_on: z.string().nullish(),
 });
 export type ReportFacts = z.infer<typeof reportFactsSchema>;
 
