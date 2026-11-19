@@ -410,6 +410,10 @@ export const reportFactsSchema = z.object({
   account_name: z.string().nullish(),
   email_domain: z.string().nullish(),
   email_confirmed_by_provider: z.boolean().optional(),
+  /** The account's username at the provider, as the provider returned it (GitHub's `login`, no `@`). */
+  account_handle: z.string().optional(),
+  /** The day the provider says the account was created, `YYYY-MM-DD` (UTC). */
+  account_created_on: z.string().optional(),
   /** The name comparison's outcome only: `match`, `partial`, `mismatch` or `unknown`. */
   name_binding: z.string().optional(),
   institution_name: z.string().nullish(),
