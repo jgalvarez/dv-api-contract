@@ -276,6 +276,7 @@ export const reportClaimSchema = z.enum([
   'employment',
   'vouch',
   'professional_license',
+  'liveness',
 ]);
 export type ReportClaim = z.infer<typeof reportClaimSchema>;
 
@@ -335,6 +336,7 @@ export const reportSourceSchema = z.enum([
   'plaid_income_bank',
   'voucher',
   'valyd',
+  'camera_liveness',
 ]);
 export type ReportSource = z.infer<typeof reportSourceSchema>;
 
