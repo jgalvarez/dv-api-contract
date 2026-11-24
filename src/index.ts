@@ -277,6 +277,7 @@ export const reportClaimSchema = z.enum([
   'vouch',
   'professional_license',
   'liveness',
+  'statement_acknowledgement',
 ]);
 export type ReportClaim = z.infer<typeof reportClaimSchema>;
 
@@ -337,6 +338,7 @@ export const reportSourceSchema = z.enum([
   'voucher',
   'valyd',
   'camera_liveness',
+  'candidate',
 ]);
 export type ReportSource = z.infer<typeof reportSourceSchema>;
 
@@ -397,6 +399,14 @@ export const reportProvidedSchema = z.object({
   license_type: z.string().optional(),
   license_state: z.string().optional(),
   license_number_last4: z.string().optional(),
+  /** The stable key of a statement the candidate was shown, the same across rewordings. */
+  statement_key: z.string().optional(),
+  /** The statement's text exactly as the candidate was shown it. Shown, not chosen: a choice is read against it. */
+  statement_text: z.string().optional(),
+  /** The candidate's choice on the statement: `yes` or `no`. Null when not answered. */
+  choice: z.enum(['yes', 'no']).nullish(),
+  /** The label of the chosen option exactly as the candidate was shown it. Null when not answered. */
+  choice_label: z.string().nullish(),
 });
 export type ReportProvided = z.infer<typeof reportProvidedSchema>;
 
